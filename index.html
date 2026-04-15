@@ -472,6 +472,48 @@
             padding: 10px 24px !important;
             font-size: 0.85rem !important;
         }
+
+/* Reloj de sesión */
+.session-timer {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: #1f5e3f;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 40px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-family: monospace;
+    letter-spacing: 0.5px;
+}
+
+.session-timer i {
+    font-size: 0.85rem;
+    color: #ffd700;
+}
+
+.session-timer.warning {
+    background: #e67e22;
+    animation: pulse 1s infinite;
+}
+
+.session-timer.critical {
+    background: #e74c3c;
+    animation: pulse 0.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
     </style>
 </head>
 <body>
@@ -539,6 +581,12 @@
 </div>
 
 <div class="app-container">
+
+<!-- Reloj de sesión -->
+<div id="sessionTimer" class="session-timer" style="display: none;">
+    <i class="fas fa-hourglass-half"></i>
+    <span id="timerText">01:00</span>
+</div>
    
    <!-- Indicador de perfil activo -->
 <div id="perfilActivoBar" class="perfil-activo" style="display: none; margin-bottom: 15px;">
@@ -806,6 +854,166 @@
     let syncInProgress = false;
     let cambiosPendientes = false;
     
+// ============================================================
+// ========== SISTEMA DE SESIÓN PERSISTENTE CON RELOJ ==========
+// ============================================================
+
+let temporizadorInactividad = null;
+let temporizadorReloj = null;
+let tiempoRestante = 60; // 60 segundos = 1 minuto
+const TIEMPO_INACTIVIDAD = 60000; // 1 minuto en milisegundos
+
+// Actualizar el reloj en pantalla
+function actualizarReloj() {
+    const timerElement = document.getElementById('timerText');
+    const sessionTimerDiv = document.getElementById('sessionTimer');
+    
+    if (!timerElement) return;
+    
+    const minutos = Math.floor(tiempoRestante / 60);
+    const segundos = tiempoRestante % 60;
+    timerElement.textContent = `${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+    
+    // Cambiar color según tiempo restante
+    if (tiempoRestante <= 10) {
+        sessionTimerDiv.classList.add('critical');
+        sessionTimerDiv.classList.remove('warning');
+    } else if (tiempoRestante <= 30) {
+        sessionTimerDiv.classList.add('warning');
+        sessionTimerDiv.classList.remove('critical');
+    } else {
+        sessionTimerDiv.classList.remove('warning', 'critical');
+    }
+}
+
+// Iniciar el contador regresivo del reloj
+function iniciarContadorReloj() {
+    if (temporizadorReloj) {
+        clearInterval(temporizadorReloj);
+    }
+    
+    tiempoRestante = 60;
+    actualizarReloj();
+    
+    temporizadorReloj = setInterval(() => {
+        if (tiempoRestante > 0) {
+            tiempoRestante--;
+            actualizarReloj();
+        }
+    }, 1000);
+}
+
+// Reiniciar el contador del reloj
+function reiniciarContadorReloj() {
+    tiempoRestante = 60;
+    actualizarReloj();
+}
+
+// Función para reiniciar el temporizador
+function reiniciarTemporizadorSesion() {
+    if (temporizadorInactividad) {
+        clearTimeout(temporizadorInactividad);
+    }
+    if (perfilActual) {
+        temporizadorInactividad = setTimeout(() => {
+            cerrarSesionPorInactividad();
+        }, TIEMPO_INACTIVIDAD);
+        // Reiniciar el contador visual del reloj
+        reiniciarContadorReloj();
+    }
+}
+
+// Cerrar sesión por inactividad
+async function cerrarSesionPorInactividad() {
+    if (perfilActual) {
+        // Detener el reloj
+        if (temporizadorReloj) {
+            clearInterval(temporizadorReloj);
+        }
+        
+        await Swal.fire({
+            title: '⏰ Sesión Expirada',
+            text: '1 minuto sin actividad. Su sesión ha finalizado.',
+            icon: 'info',
+            timer: 2000,
+            showConfirmButton: false
+        });
+        cerrarSesion();
+    }
+}
+
+// Detectar actividad del usuario
+function activarDetectorInactividad() {
+    const eventos = ['click', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    eventos.forEach(evento => {
+        document.addEventListener(evento, reiniciarTemporizadorSesion);
+    });
+}
+
+// Verificar sesión al cargar
+function verificarSesionAlCargar() {
+    const sesionValida = sessionStorage.getItem('sesionActiva');
+    const perfilGuardado = localStorage.getItem('perfilActual');
+    
+    if (sesionValida === 'true' && perfilGuardado && PASSWORDS[perfilGuardado]) {
+        // Restaurar sesión
+        perfilActual = perfilGuardado;
+        const nombres = {
+            solicitante: 'Solicitante',
+            contraloria: 'Contraloría',
+            auditoria: 'Auditoría',
+            'control-interno': 'Administrador'
+        };
+        document.getElementById('perfilActivoNombre').innerText = nombres[perfilGuardado];
+        document.getElementById('perfilActivoBar').style.display = 'flex';
+        aplicarPermisosPorPerfil();
+        ocultarModalPerfil();
+        iniciarTemporizadorSesion();
+        activarDetectorInactividad();
+        mostrarRelojSesion(true);
+    } else {
+        mostrarRelojSesion(false);
+        if (document.getElementById('profileModal')) {
+            mostrarModalPerfil();
+        }
+    }
+}
+
+function iniciarTemporizadorSesion() {
+    iniciarContadorReloj();
+    reiniciarTemporizadorSesion();
+}
+
+// Mostrar u ocultar el reloj de sesión
+function mostrarRelojSesion(mostrar) {
+    const sessionTimer = document.getElementById('sessionTimer');
+    if (sessionTimer) {
+        sessionTimer.style.display = mostrar ? 'flex' : 'none';
+    }
+}
+
+// Modificar la función cerrarSesion original para ocultar el reloj
+const cerrarSesionOriginalSesion = window.cerrarSesion || function() {};
+window.cerrarSesion = function() {
+    mostrarRelojSesion(false);
+    if (temporizadorReloj) {
+        clearInterval(temporizadorReloj);
+    }
+    if (temporizadorInactividad) {
+        clearTimeout(temporizadorInactividad);
+    }
+    sessionStorage.removeItem('sesionActiva');
+    if (cerrarSesionOriginalSesion) cerrarSesionOriginalSesion();
+    location.reload();
+};
+
+// Guardar sesión al recargar (NO al cerrar pestaña)
+window.addEventListener('beforeunload', function() {
+    if (perfilActual) {
+        sessionStorage.setItem('sesionActiva', 'true');
+    }
+});
+
     // ============================================================
     // ========== FUNCIONES DE SUPABASE ==========
     // ============================================================
@@ -1553,30 +1761,37 @@ let modoEdicionAdmin = false;  // ← AGREGAR ESTA LÍNEA
 }
     
     function establecerPerfil(perfil) {
-        perfilActual = perfil;
-        localStorage.setItem('perfilActual', perfil);
-        
-        const nombres = {
-            solicitante: 'Solicitante',
-            contraloria: 'Contraloría',
-            auditoria: 'Auditoría',
-            'control-interno': 'Administrador'
-        };
-        
-        document.getElementById('perfilActivoNombre').innerText = nombres[perfil];
-        document.getElementById('perfilActivoBar').style.display = 'flex';
-        
-        aplicarPermisosPorPerfil();
-        refrescarContador();  // ← AGREGAR ESTA LÍNEA
-        
-        Swal.fire({
-            title: `✅ Perfil activado`,
-            html: `Ha iniciado sesión como <strong>${nombres[perfil]}</strong>`,
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false
-        });
-    }
+    // ===== NUEVAS LÍNEAS =====
+    sessionStorage.setItem('sesionActiva', 'true');
+    iniciarTemporizadorSesion();
+    activarDetectorInactividad();
+    mostrarRelojSesion(true);
+    // ===== FIN NUEVAS LÍNEAS =====
+    
+    perfilActual = perfil;
+    localStorage.setItem('perfilActual', perfil);
+    
+    const nombres = {
+        solicitante: 'Solicitante',
+        contraloria: 'Contraloría',
+        auditoria: 'Auditoría',
+        'control-interno': 'Administrador'
+    };
+    
+    document.getElementById('perfilActivoNombre').innerText = nombres[perfil];
+    document.getElementById('perfilActivoBar').style.display = 'flex';
+    
+    aplicarPermisosPorPerfil();
+    refrescarContador();
+    
+    Swal.fire({
+        title: `✅ Perfil activado`,
+        html: `Ha iniciado sesión como <strong>${nombres[perfil]}</strong>`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+    });
+}
     
     function aplicarPermisosPorPerfil() {
     const seccion1 = document.getElementById('section1');
@@ -5538,6 +5753,8 @@ refrescarContador();  // ← AGREGAR ESTA LÍNEA
                 document.getElementById('paginaDisplay').innerText = `${paginaGuardada} de 4`;
             }
         }
+
+verificarSesionAlCargar();
         
         localStorage.removeItem('tabActiva');
         localStorage.removeItem('paginaActiva');
