@@ -2489,6 +2489,10 @@ Folio de Solicitud: ${record.folioSolicitud}
 Fecha de Registro: ${new Date().toLocaleDateString('es-MX')}
 Hora de Registro: ${formatearHora()}
 
+🌐 Acceso al Sistema:
+-------------------------------------------
+https://jpojedawork-ai.github.io/DonatariasCSW/
+
 👤 DATOS DEL SOLICITANTE:
 -------------------------------------------
 Nombre: ${record.solicitante.nombre}
@@ -3232,6 +3236,10 @@ refrescarContador();  // ← AGREGAR ESTA LÍNEA
 Fecha de Validación: ${record.contraloria.fecha}
 Validación: ${procedenteFlag ? '✅ PROCEDENTE' : '❌ IMPROCEDENTE'}
 
+🌐 Acceso al Sistema:
+-------------------------------------------
+https://jpojedawork-ai.github.io/DonatariasCSW/
+
 📋 Datos de Validación:
 - Constancia de Situación Fiscal: ${record.constanciaFiscal || 'N/A'}
 - Efos (art. 69-b): ${record.efos || 'N/A'}
@@ -3742,6 +3750,10 @@ async function guardarValidacionAuditoria() {
 -------------------------------------------
 Fecha de Validación: ${record.contraloria?.fecha || 'N/A'}
 Validación: ${record.contraloria?.validacion === 'Procedente' ? '✅ PROCEDENTE' : (record.contraloria?.validacion === 'Improcedente' ? '❌ IMPROCEDENTE' : 'N/A')}
+
+🌐 Acceso al Sistema:
+-------------------------------------------
+https://jpojedawork-ai.github.io/DonatariasCSW/
 
 📋 Datos de Validación de Contraloría:
 - Constancia de Situación Fiscal: ${record.constanciaFiscal || 'N/A'}
